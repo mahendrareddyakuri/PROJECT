@@ -15,7 +15,6 @@
 | Tracker | ByteTrack |
 | Platform | NVIDIA Jetson |
 | Classes | 9 Object Types |
-| Environment | Docker (`jetson_labs_dev`) |
 
 ---
 
@@ -28,7 +27,6 @@ The surveillance system is deployed on NVIDIA Jetson with GPU acceleration. It i
 - **Detection:** YOLOv8n (GPU inference)
 - **Tracking:** ByteTrack (multi-object tracking)
 - **Alert Engine:** Zone breach + loitering detection
-- **Output:** Annotated video + alert panel (`output.mp4`)
 
 ---
 
