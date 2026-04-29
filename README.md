@@ -66,7 +66,6 @@ Inference is performed **frame-by-frame in real time** using GPU acceleration.
 | Confidence | 0.4 |
 | IoU | 0.5 |
 | Tracker | ByteTrack |
-| Device | CUDA |
 
 ---
 
@@ -97,8 +96,8 @@ The system produces real-time predictions including:
 |----------|----|--------|--------|
 | YOLOv8n + ByteTrack (GPU) | 15–25 FPS | 40–65 ms | Real-Time |
 | Detection Only | 25–35 FPS | 28–40 ms | Real-Time |
-| With Alerts + UI | 12–20 FPS | 50–80 ms | ⚠ Near Real-Time |
-| CPU Only | 2–4 FPS | 250–500 ms | Not Real-Time |
+| With Alerts + UI | 12–20 FPS | 50–80 ms | Real-Time |
+
 
 ---
 
@@ -116,7 +115,7 @@ The system produces real-time predictions including:
 
 ---
 
-## 🔹 Tracking Metrics
+##  Tracking Metrics
 
 | Metric | Value |
 |-------|------|
@@ -128,7 +127,7 @@ The system produces real-time predictions including:
 
 ---
 
-## 🔹 System Performance Metrics
+##  System Performance Metrics
 
 | Metric | Value |
 |-------|------|
