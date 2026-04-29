@@ -20,7 +20,9 @@
 
 # 1️ Running Model
 
-The surveillance system is deployed on NVIDIA Jetson with GPU acceleration. It integrates object detection and tracking in a real-time pipeline.
+The system uses the YOLOv8 object detection model for real-time inference. A lightweight variant (YOLOv8n) was selected to ensure smooth performance on Jetson hardware while maintaining acceptable detection accuracy.
+
+The model is deployed with GPU acceleration (CUDA), allowing the system to process live video streams efficiently. The overall pipeline integrates detection, tracking, and alert generation in a continuous loop.
 
 ### Pipeline Architecture
 - **Input:** Live webcam / video stream via OpenCV
@@ -31,6 +33,12 @@ The surveillance system is deployed on NVIDIA Jetson with GPU acceleration. It i
 ---
 
 # 2️ Weights Loaded
+Pretrained weights (`yolov8n.pt`) are used for initializing the model. These weights are trained on the COCO dataset, which includes a wide range of object categories.
+
+Although the model supports multiple classes, the system primarily focuses on detecting persons, as this is the key requirement for surveillance applications.
+
+Using pretrained weights allows the system to avoid the need for custom training while still achieving reliable performance.
+
 
 - **Model Weights:** `yolov8n.pt`
 - **Dataset:** COCO (80 classes)
@@ -45,6 +53,16 @@ The surveillance system is deployed on NVIDIA Jetson with GPU acceleration. It i
 ---
 
 # 3️ Inference
+
+Inference is performed on each frame captured from the camera. The process includes:
+
+1. Capturing a frame from the video stream
+2. Passing the frame through the YOLO model
+3. Applying non-maximum suppression to remove duplicate detections
+4. Filtering detections based on a confidence threshold
+5. Passing results to the tracking module
+
+The system operates at a resolution of 640 × 480, which provides a balance between speed and accuracy. A confidence threshold of 0.40 is used to reduce false detections while maintaining reasonable recall.
 
 Inference is performed **frame-by-frame in real time** using GPU acceleration.
 
@@ -75,7 +93,7 @@ The system produces real-time predictions including:
 - Class labels
 - Confidence scores
 - Unique tracking IDs
-<img width="1200" height="1600" alt="project6901img" src="https://github.com/user-attachments/assets/06c571a3-9bc9-409d-b929-8a8136a25230" />
+<img width="1290" height="587" alt="WhatsApp Image 2026-04-29 at 9 06 54 AM" src="https://github.com/user-attachments/assets/dbaf1dbc-ff85-4297-a90c-651ce0d2d1dd" />
 
 ### Behavioral Detection
 
@@ -89,6 +107,13 @@ The system produces real-time predictions including:
 ---
 
 # 5️ Speed (Performance)
+The system achieves real-time performance on Jetson hardware with GPU acceleration.
+
+- Frames Per Second (FPS): 15–25  
+- Inference Latency: 40–65 milliseconds per frame  
+
+The performance remains stable during continuous operation. When additional components such as alert logic and UI overlays are enabled, a slight reduction in FPS is observed, but the system still operates within real-time constraints.
+
 
 | Condition | FPS | Latency | Status |
 |----------|----|--------|--------|
@@ -103,6 +128,14 @@ The system produces real-time predictions including:
 
 ## Detection Metrics
 
+- mAP@0.5 (COCO): 45.2%  
+- mAP@0.5 (Person): approximately 56%  
+- Precision: approximately 0.81  
+- Recall: approximately 0.74  
+- Confidence Threshold: 0.40  
+
+These values indicate that the model provides a reasonable balance between detecting relevant objects and avoiding false positives.
+
 | Metric | Value |
 |-------|------|
 | mAP@0.5 (COCO) | 45.2% |
@@ -114,6 +147,15 @@ The system produces real-time predictions including:
 ---
 
 ##  Tracking Metrics
+- MOTA (Multi-Object Tracking Accuracy): approximately 68%  
+- MOTP (Multi-Object Tracking Precision): approximately 0.78  
+- ID Switches: less than 5%  
+- Track Confirmation (n_init): 3 frames  
+- Track Persistence (max_age): 70 frames  
+
+The tracking system maintains stable identities across frames and minimizes identity switches, which is important for reliable surveillance.
+
+---
 
 | Metric | Value |
 |-------|------|
@@ -126,6 +168,14 @@ The system produces real-time predictions including:
 ---
 
 ##  System Performance Metrics
+
+- FPS: 15–25  
+- Inference Latency: 40–65 ms  
+- Alert Latency: less than one frame  
+- Alert Success Rate: approximately 92%  
+- False Alert Rate: less than 8%  
+
+The alert system responds immediately when a defined condition is met, such as entry into a restricted zone.
 
 | Metric | Value |
 |-------|------|
@@ -145,4 +195,4 @@ The system successfully demonstrates:
 - Stable multi-object tracking with unique IDs  
 - Accurate zone-based alert system  
 - Efficient GPU performance on Jetson  
-
+- I am looking forward to proceed with UI part of my project.
