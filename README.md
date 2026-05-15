@@ -1,198 +1,276 @@
-# Preliminary Project Results  
-## Real-Time Security & Surveillance System  
-### With Object Detection and Tracking  
+# Real-Time Security & Surveillance System
+### With Object Detection and Tracking
 
-**Mahendra Reddy Akuri | VR64933**  
-**Platform:** NVIDIA Jetson (JetPack 5.1.6, CUDA 11.4)  
-
----
-
-##  System Overview
-
-| Component | Details |
-|----------|--------|
-| Model | YOLOv8n |
-| Tracker | ByteTrack |
-| Platform | NVIDIA Jetson |
-| Classes | 9 Object Types |
+**Student:** Mahendra Reddy Akuri | **ID:** VR64933  
+**Platform:** NVIDIA Jetson | **JetPack:** 5.1.6 | **CUDA:** 11.4  
+**Models:** YOLOv8n + DeepSORT (ByteTrack)
 
 ---
 
-# 1️ Running Model
+## What This Project Does
 
-The system uses the YOLOv8 object detection model for real-time inference. A lightweight variant (YOLOv8n) was selected to ensure smooth performance on Jetson hardware while maintaining acceptable detection accuracy.
+This is a real-time security surveillance system that watches a video feed — either from a camera or a video file — and automatically detects people, cars, dogs, cats, and other objects. It tracks each one with a unique label like `person1`, `person2`, `car1`, and so on. If someone walks into a restricted area or stands in one spot for too long, the system fires an alert instantly. You don't need to sit and watch the screen — the system does all of that for you.
 
-The model is deployed with GPU acceleration (CUDA), allowing the system to process live video streams efficiently. The overall pipeline integrates detection, tracking, and alert generation in a continuous loop.
-
-### Pipeline Architecture
-- **Input:** Live webcam / video stream via OpenCV
-- **Detection:** YOLOv8n (GPU inference)
-- **Tracking:** ByteTrack (multi-object tracking)
-- **Alert Engine:** Zone breach + loitering detection
+Everything runs on an NVIDIA Jetson device using GPU acceleration, which means it processes video in real time at 15 to 25 frames per second.
 
 ---
 
-# 2️ Weights Loaded
-Pretrained weights (`yolov8n.pt`) are used for initializing the model. These weights are trained on the COCO dataset, which includes a wide range of object categories.
+## Project Structure
 
-Although the model supports multiple classes, the system primarily focuses on detecting persons, as this is the key requirement for surveillance applications.
-
-Using pretrained weights allows the system to avoid the need for custom training while still achieving reliable performance.
-
-
-- **Model Weights:** `yolov8n.pt`
-- **Dataset:** COCO (80 classes)
-- **Active Classes (9):**
-  - person, bicycle, car, motorcycle, bus, truck, cat, dog, horse
-
-### Configuration
-- Confidence Threshold: `0.4`
-- IoU Threshold: `0.5`
-- Device: CUDA (GPU)
-
----
-
-# 3️ Inference
-
-Inference is performed on each frame captured from the camera. The process includes:
-
-1. Capturing a frame from the video stream
-2. Passing the frame through the YOLO model
-3. Applying non-maximum suppression to remove duplicate detections
-4. Filtering detections based on a confidence threshold
-5. Passing results to the tracking module
-
-The system operates at a resolution of 640 × 480, which provides a balance between speed and accuracy. A confidence threshold of 0.40 is used to reduce false detections while maintaining reasonable recall.
-
-Inference is performed **frame-by-frame in real time** using GPU acceleration.
-
-### Pipeline Steps
-1. Capture frame from camera
-2. Run YOLO forward pass
-3. Apply Non-Max Suppression (NMS)
-4. Assign tracking IDs via ByteTrack
-5. Label objects (`person1`, `car1`, etc.)
-6. Apply alert logic (zone + loitering)
-
-### Parameters
-
-| Parameter | Value |
-|----------|------|
-| Resolution | 640 × 640 |
-| Confidence | 0.4 |
-| IoU | 0.5 |
-| Tracker | ByteTrack |
+```
+surveillance_project/
+│
+├── main.py                 # Main file — run this to start the system
+├── tracker.py              # YOLOv8 + ByteTrack detection and tracking
+├── alert_engine.py         # Zone breach and loitering detection logic
+├── zone_config.py          # Restricted zone definitions and class colors
+├── evaluate_metrics.py     # Runs and prints all evaluation metrics
+│
+├── weights/
+│   └── yolov8n.pt          # YOLOv8 nano pre-trained weights (COCO)
+│
+├── logs/
+│   ├── alerts.log          # Auto-generated alert history with timestamps
+│   └── metrics_results.txt # Auto-generated metrics output
+│
+├── alerts/                 # Folder reserved for saved alert frames
+├── zones/                  # Folder reserved for zone configuration files
+│
+├── test_video.mp4          # Sample video for testing
+└── output.mp4              # Generated output video with detections drawn
+```
 
 ---
 
-# 4️ Predictions
+## How It Was Built — Step by Step
 
-The system produces real-time predictions including:
+### Step 1 — Setting Up the Environment
 
-- Bounding boxes
-- Class labels
-- Confidence scores
-- Unique tracking IDs
-<img width="1290" height="587" alt="WhatsApp Image 2026-04-29 at 9 06 54 AM" src="https://github.com/user-attachments/assets/dbaf1dbc-ff85-4297-a90c-651ce0d2d1dd" />
+The project runs inside a Docker container on the Jetson device. The container is based on the official NVIDIA `l4t-ml` image which comes with PyTorch and CUDA already set up for Jetson hardware.
 
-### Behavioral Detection
+First, we entered the container:
+```bash
+docker exec -it jetson_labs_dev bash
+```
 
-####  Restricted Zone Breach
-- Triggered when object enters defined polygon
-- Logged with timestamp
+Then we created the project directory:
+```bash
+mkdir -p /workspace/surveillance_project/weights
+mkdir -p /workspace/surveillance_project/logs
+mkdir -p /workspace/surveillance_project/alerts
+mkdir -p /workspace/surveillance_project/zones
+cd /workspace/surveillance_project
+```
 
-#### ⏱️ Loitering Detection
-- Triggered when person stays in same area > 10 seconds
+### Step 2 — Installing Dependencies
+
+Inside the container, we installed all required Python packages:
+```bash
+python3.8 -m pip install ultralytics==8.0.196 --no-deps
+python3.8 -m pip install deep-sort-realtime lapx==0.5.2
+python3.8 -m pip install PyYAML requests tqdm seaborn pandas py-cpuinfo thop
+```
+
+We also had to build torchvision from source because the Jetson needs a version that matches its specific PyTorch build:
+```bash
+cd /tmp
+git clone --branch v0.16.1 https://github.com/pytorch/vision torchvision
+cd torchvision
+python3.8 setup.py install
+cd /workspace/surveillance_project
+```
+
+### Step 3 — Downloading YOLOv8 Weights
+
+YOLOv8 downloads the weights automatically the first time you run it. But you can also download manually:
+```bash
+cd weights/
+wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt
+cd ..
+```
+
+### Step 4 — Writing the Code
+
+The project has five main Python files. Each one does a specific job:
+
+**zone_config.py** — Defines which areas of the video are restricted. You draw polygons using pixel coordinates. You can change these coordinates to match your actual camera view.
+
+**tracker.py** — Loads the YOLOv8 model and runs it on every frame. It uses the GPU (CUDA) for speed and the ByteTrack algorithm to follow objects across frames.
+
+**alert_engine.py** — Checks every tracked object every frame. If an object enters a restricted zone, it fires a zone alert. If a person stays in roughly the same spot for more than 10 seconds, it fires a loitering alert. All alerts are saved to a log file.
+
+**main.py** — The main entry point. It opens the video source, runs detection and tracking on each frame, draws the HUD interface on screen, and saves everything to output.mp4.
+
+**evaluate_metrics.py** — Runs the system on a video and prints a full metrics report including FPS, precision, recall, MOTA, and ID switches.
+
+### Step 5 — Running the System
+
+To run on a video file:
+```bash
+python3.8 main.py --source test_video.mp4 --headless
+```
+
+To run on a live webcam:
+```bash
+python3.8 main.py --source 0 --headless
+```
+
+The `--headless` flag means the output goes to `output.mp4` instead of trying to open a display window. This is needed when running inside Docker without a monitor connected.
+
+### Step 6 — Running the Metrics Evaluation
+
+```bash
+python3.8 evaluate_metrics.py --source test_video.mp4
+```
+
+This prints a full report in the terminal and also saves it to `logs/metrics_results.txt`.
+
+### Step 7 — Viewing the Output
+
+Copy the output video from the container to your desktop:
+```bash
+# Run this on the HOST machine (not inside Docker)
+docker cp jetson_labs_dev:/workspace/surveillance_project/output.mp4 ~/Desktop/output.mp4
+docker cp jetson_labs_dev:/workspace/surveillance_project/logs/alerts.log ~/Desktop/alerts.log
+```
+
+Then play it:
+```bash
+vlc ~/Desktop/output.mp4
+```
 
 ---
 
-# 5️ Speed (Performance)
-The system achieves real-time performance on Jetson hardware with GPU acceleration.
+## How to Customize Restricted Zones
 
-- Frames Per Second (FPS): 15–25  
-- Inference Latency: 40–65 milliseconds per frame  
+Open `zone_config.py` and change the polygon coordinates to match the areas you want to restrict in your camera view. Each point is `(x, y)` in pixels.
 
-The performance remains stable during continuous operation. When additional components such as alert logic and UI overlays are enabled, a slight reduction in FPS is observed, but the system still operates within real-time constraints.
+```python
+RESTRICTED_ZONES = [
+    {
+        "name": "Server Room",
+        "polygon": [(100, 100), (300, 100), (300, 300), (100, 300)],
+        "color": (0, 0, 255)   # Red in BGR
+    },
+]
+```
 
+To figure out the right coordinates, run the system first, pause the output video, and note the pixel positions of the corners of the area you want to restrict.
 
-| Condition | FPS | Latency | Status |
-|----------|----|--------|--------|
-| YOLOv8n + ByteTrack (GPU) | 15–25 FPS | 40–65 ms | Real-Time |
-| Detection Only | 25–35 FPS | 28–40 ms | Real-Time |
-| With Alerts + UI | 12–20 FPS | 50–80 ms | Real-Time |
-
+You can also change how long someone has to stand still before a loitering alert fires:
+```python
+LOITERING_THRESHOLD = 10   # seconds
+```
 
 ---
 
-# 6 Metrics Used
+https://github.com/user-attachments/assets/a0ffd331-2301-4ec7-beb2-6fbb8f31274b
 
-## Detection Metrics
+---
 
-- mAP@0.5 (COCO): 45.2%  
-- mAP@0.5 (Person): approximately 56%  
-- Precision: approximately 0.81  
-- Recall: approximately 0.74  
-- Confidence Threshold: 0.40  
+## What the UI Shows
 
-These values indicate that the model provides a reasonable balance between detecting relevant objects and avoiding false positives.
+The output video has a professional HUD (heads-up display) layout:
 
+**Header bar (top)** — Shows the system title, a blinking REC indicator, live FPS with a sparkline graph, total objects tracked, total alerts fired, current timestamp, and frame counter.
+
+**Video panel (center-left)** — Shows the live video with bounding boxes drawn around every detected object. Each box has corner bracket accents, a label chip showing the object ID and confidence percentage, and a crosshair dot at the center. Restricted zones are shown as pulsing colored overlays with dashed borders. A subtle scanline effect runs across the video. The bottom-left corner shows a live count of each object class.
+
+**Alert panel (right)** — Shows a scrolling log of all alerts. Zone breach alerts appear with a red stripe and ZONE badge. Loitering alerts appear with an orange stripe and LOITER badge. Each entry shows the timestamp and a description. Progress bars at the top show the ratio of zone vs loitering alerts.
+
+**Footer bar (bottom)** — Shows the model name, tracker, platform, CUDA version, number of classes, and confidence threshold.
+
+---
+
+## Metrics
+
+### Detection Metrics
 | Metric | Value |
-|-------|------|
-| mAP@0.5 (COCO) | 45.2% |
-| mAP@0.5 (Person) | ~56% |
-| Precision | ~0.81 |
-| Recall | ~0.74 |
+|--------|-------|
+| mAP@0.5 (COCO official) | 37.3% |
+| mAP@0.5:0.95 | 45.2% |
+| Precision (approx) | ~81% |
+| Recall (approx) | ~74% |
 | Confidence Threshold | 0.40 |
 
----
-
-##  Tracking Metrics
-- MOTA (Multi-Object Tracking Accuracy): approximately 68%  
-- MOTP (Multi-Object Tracking Precision): approximately 0.78  
-- ID Switches: less than 5%  
-- Track Confirmation (n_init): 3 frames  
-- Track Persistence (max_age): 70 frames  
-
-The tracking system maintains stable identities across frames and minimizes identity switches, which is important for reliable surveillance.
-
----
-
+### Tracking Metrics (DeepSORT)
 | Metric | Value |
-|-------|------|
+|--------|-------|
 | MOTA | ~68% |
 | MOTP | ~0.78 |
 | ID Switches | < 5% |
-| max_age | 70 |
-| n_init | 3 |
+| Track max_age | 70 frames |
+| Track n_init | 3 frames |
 
----
-
-##  System Performance Metrics
-
-- FPS: 15–25  
-- Inference Latency: 40–65 ms  
-- Alert Latency: less than one frame  
-- Alert Success Rate: approximately 92%  
-- False Alert Rate: less than 8%  
-
-The alert system responds immediately when a defined condition is met, such as entry into a restricted zone.
-
+### System Performance
 | Metric | Value |
-|-------|------|
-| FPS | 15–25 |
-| Inference Latency | 40–65 ms |
-| Alert Latency | < 1 frame |
+|--------|-------|
+| Average FPS (GPU) | 15–25 FPS |
+| Inference Latency | 40–65 ms/frame |
 | Alert Success Rate | ~92% |
 | False Alert Rate | < 8% |
 
 ---
 
-# Summary
+## Technologies Used
 
-The system successfully demonstrates:
+| Technology | Purpose |
+|------------|---------|
+| Python 3.8 | Programming language |
+| YOLOv8n (Ultralytics) | Object detection model |
+| ByteTrack | Multi-object tracking algorithm |
+| DeepSORT (deep-sort-realtime) | Re-ID based tracking package |
+| OpenCV (cv2) | Video capture, drawing, and output |
+| PyTorch 2.1 + CUDA 11.4 | GPU-accelerated model inference |
+| NumPy | Frame processing and math |
+| NVIDIA Jetson (Orin) | Edge AI hardware |
+| Docker (l4t-ml container) | Isolated runtime environment |
+| COCO Dataset | Pre-training data for YOLOv8 |
 
-- Real-time object detection and tracking  
-- Stable multi-object tracking with unique IDs  
-- Accurate zone-based alert system  
-- Efficient GPU performance on Jetson  
-- I am looking forward to proceed with UI part of my project.
+---
+
+
+
+## Quick Command Reference
+
+```bash
+# Enter the correct container
+docker exec -it jetson_labs_dev bash
+
+# Go to project
+cd /workspace/surveillance_project
+
+# Check GPU is working
+python3.8 -c "import torch; print('CUDA:', torch.cuda.is_available())"
+
+# Run on video file
+python3.8 main.py --source test_video.mp4 --headless
+
+
+
+# Run on webcam
+python3.8 main.py --source 0 --headless
+
+# Run metrics
+python3.8 evaluate_metrics.py --source test_video.mp4
+
+# View alerts
+cat logs/alerts.log
+
+# View metrics
+cat logs/metrics_results.txt
+
+# Copy output to desktop (run on HOST)
+docker cp jetson_labs_dev:/workspace/surveillance_project/output.mp4 ~/Desktop/output.mp4
+
+# Save progress
+docker commit jetson_labs_dev surveillance_project_saved
+```
+
+---
+
+## Author
+
+**Mahendra Reddy Akuri**  
+Student ID: VR64933  
+Project: Real-Time Security & Surveillance System With Object Detection and Tracking
